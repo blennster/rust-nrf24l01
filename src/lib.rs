@@ -444,6 +444,7 @@ impl NRF24L01 {
     /// Construct a new driver instance.
     ///
     /// * `ce_pin`: the GPIO number (Linux SysFS) connected to the CE pin of the transceiver
+    /// * `spi_port`: the SPI port the device is connected to.
     /// * `spi_device`: the SPI device number (or channel) the transceiver is connected to.
     ///
     /// We use the spidev linux kernel driver. Ensure you have enabled SPI on your system.
@@ -452,8 +453,8 @@ impl NRF24L01 {
     ///
     /// System IO errors
     ///
-    pub fn new(ce_pin: u64, spi_device: u8) -> io::Result<NRF24L01> {
-        let mut spi = spidev::Spidev::open(format!("/dev/spidev0.{}", spi_device))?;
+    pub fn new(ce_pin: u64, spi_port: u8, spi_device: u8) -> io::Result<NRF24L01> {
+        let mut spi = spidev::Spidev::open(format!("/dev/spidev{}.{}", spi_port, spi_device))?;
         let options = spidev::SpidevOptions::new()
             .bits_per_word(8)
             .max_speed_hz(10_000_000)
