@@ -366,8 +366,8 @@ impl NRF24L01 {
         }
     }
 
-    fn set_full_address(&self, pipe: Register, address: &[u8]) -> io::Result<()> {
-        let mut response_buffer = [0u8; 6];
+    fn set_full_address(&self, pipe: Register, address: &[u8; 3]) -> io::Result<()> {
+        let mut response_buffer = [0u8; 4];
         let mut command = vec![W_REGISTER | pipe];
         command.extend_from_slice(address);
         self.send_command(&command, &mut response_buffer)
