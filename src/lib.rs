@@ -159,6 +159,8 @@ impl Default for PALevel {
     }
 }
 
+const ADDRESS_WIDTH: usize = 3;
+
 /// Receiver mode configuration
 #[derive(Debug, Default)]
 pub struct RXConfig {
@@ -185,13 +187,13 @@ pub struct RXConfig {
     /// The address is in little endian order: the first byte is the least significant one.
     ///
     /// You must provide a valid address for Pipe 0.
-    pub pipe0_address: [u8; 5],
+    pub pipe0_address: [u8; ADDRESS_WIDTH],
     /// Pipe 1 address, defaults to None (disabled)
     ///
-    /// All pipes 2-5 share the 4 most significant bytes with the pipe 1 address, so
+    /// All pipes 2-5 share the first most significant bytes with the pipe 1 address, so
     /// you only need to provide the least significant byte to enable one of those pipes or
     /// set it to None to disable it (default).
-    pub pipe1_address: Option<[u8; 5]>,
+    pub pipe1_address: Option<[u8; ADDRESS_WIDTH]>,
     /// Pipe 2 LSB, defaults to None (disabled)
     pub pipe2_addr_lsb: Option<u8>,
     /// Pipe 3 LSB, defaults to None (disabled)
@@ -236,7 +238,7 @@ pub struct TXConfig {
     ///
     /// This is also the address on which ACK packets are received.
     /// The address is in little endian order: the first byte is the least significant one.
-    pub pipe0_address: [u8; 5],
+    pub pipe0_address: [u8; ADDRESS_WIDTH],
 }
 
 /// The Operating mode, either Receiver or Transmitter.
@@ -275,6 +277,7 @@ const CONFIG: Register = 0;
 const EN_AA: Register = 0x01;
 // Enabled RX addresses, p 54
 const EN_RXADDR: Register = 0x02;
+const SETUP_AW: Register = 0x03;
 // Setup of automatic retransmission, p 55
 const SETUP_RETR: Register = 0x04;
 // Channel, p 55
@@ -363,10 +366,10 @@ impl NRF24L01 {
         }
     }
 
-    fn set_full_address(&self, pipe: Register, address: [u8; 5]) -> io::Result<()> {
+    fn set_full_address(&self, pipe: Register, address: &[u8]) -> io::Result<()> {
         let mut response_buffer = [0u8; 6];
-        let mut command = [W_REGISTER | pipe, 0, 0, 0, 0, 0];
-        command[1..].copy_from_slice(&address);
+        let mut command = vec![W_REGISTER | pipe];
+        command.extend_from_slice(address);
         self.send_command(&command, &mut response_buffer)
     }
 
@@ -377,11 +380,11 @@ impl NRF24L01 {
         // set channel
         self.set_channel(config.channel)?;
         // set Pipe 0 address
-        self.set_full_address(RX_ADDR_P0, config.pipe0_address)?;
+        self.set_full_address(RX_ADDR_P0, &config.pipe0_address)?;
         let mut enabled = 1u8;
         // Pipe 1
         if let Some(address) = config.pipe1_address {
-            self.set_full_address(RX_ADDR_P1, address)?;
+            self.set_full_address(RX_ADDR_P1, &address)?;
             enabled |= 0b0000_0010
         };
         // Pipe 2
@@ -418,8 +421,8 @@ impl NRF24L01 {
         // set channel
         self.set_channel(config.channel)?;
         // set destination and Pipe 0 address
-        self.set_full_address(RX_ADDR_P0, config.pipe0_address)?;
-        self.set_full_address(TX_ADDR, config.pipe0_address)?;
+        self.set_full_address(RX_ADDR_P0, &config.pipe0_address)?;
+        self.set_full_address(TX_ADDR, &config.pipe0_address)?;
         // disable other pipes
         self.write_register(EN_RXADDR, 1u8)?;
         // retransmission settings
@@ -484,6 +487,8 @@ impl NRF24L01 {
         // dynamic payload and payload with ACK
         self.write_register(DYNPD, 0b0011_1111)?;
         self.write_register(FEATURE, 0b0000_0110)?;
+        // shrink address width to 3 bytes
+        self.write_register(SETUP_AW, 0b0000_0001)?;
 
         // Mode specific configuration
         match *mode {
@@ -757,7 +762,7 @@ mod tests {
         assert_eq!(rx_conf.data_rate, DataRate::R1Mbps);
         assert_eq!(rx_conf.channel, 0);
         assert_eq!(rx_conf.pa_level, PALevel::Min);
-        assert_eq!(rx_conf.pipe0_address, [0u8; 5]);
+        assert_eq!(rx_conf.pipe0_address, [0u8; ADDRESS_WIDTH]);
         assert_eq!(rx_conf.pipe1_address, None);
     }
 
@@ -767,7 +772,7 @@ mod tests {
             channel: 108,
             data_rate: DataRate::R250Kbps,
             pa_level: PALevel::Low,
-            pipe0_address: *b"rxadd",
+            pipe0_address: *b"rxa",
             ..Default::default()
         };
         rx_conf.pipe0_address.reverse();
@@ -783,6 +788,6 @@ mod tests {
         assert_eq!(tx_conf.pa_level, PALevel::Min);
         assert_eq!(tx_conf.max_retries, 0);
         assert_eq!(tx_conf.retry_delay, 0);
-        assert_eq!(tx_conf.pipe0_address, [0u8; 5]);
+        assert_eq!(tx_conf.pipe0_address, [0u8; ADDRESS_WIDTH]);
     }
 }
